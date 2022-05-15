@@ -1,4 +1,5 @@
 import os
+import struct
 import time
 import asyncio
 import pandas as pd
@@ -7,10 +8,10 @@ from plotly.subplots import make_subplots
 
 ACCEL_STRING_UUID = 'fc0a2501-af4b-4c14-b795-a49e9f7e6b84'
 
-MAXIMUM_RUNTIME = 60  # in s
+MAXIMUM_RUNTIME = 600  # in s
 
 DRAW_PLOTS = True
-PLOT_UPDATE_INTERVAL = 10  # in s
+PLOT_UPDATE_INTERVAL = 5  # in s
 
 CSV_FILE_PATH = "out.csv"
 
@@ -46,18 +47,11 @@ class Nano33BLE(object):
         if DRAW_PLOTS:
             self.init_plots()
 
-    def callback_data_string(self, _, data):
-        data_string = data.decode()
-
-        strings = data_string.split(";")
+    def callback_data(self, _, data):
         floats = list()
-
-        for s in strings:
-            try:
-                floats.append(float(s))
-            except ValueError:
-                print(f"Could not parse string: '{s}'")
-                floats.append(floats[-1])
+        while len(data) > 0:
+            floats.append(struct.unpack("f", data[0:4])[0])
+            del data[0:4]
 
         new_df = pd.DataFrame()
 
@@ -93,7 +87,7 @@ class Nano33BLE(object):
                     async with BleakClient(d.address) as client:
                         print(f'Connected to {d.address}')
 
-                        await client.start_notify(ACCEL_STRING_UUID, self.callback_data_string)
+                        await client.start_notify(ACCEL_STRING_UUID, self.callback_data)
 
                         await asyncio.sleep(MAXIMUM_RUNTIME)
 
@@ -150,7 +144,6 @@ class Nano33BLE(object):
         )
 
         self.plot_figure.update_layout(title_text="Nano Sense BLE Data")
-        self.plot_figure.show()
 
     def update_plots(self):
         self.plot_figure.data[0]["y"] = self.df[accel_x_name]

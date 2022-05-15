@@ -8,20 +8,21 @@
 
 // Set these values as required
 #define DEBUG false
-#define FLOAT_PRECISION 4
-#define DATASET_SIZE 10
+#define VALUES_PER_DATASET 6
+#define FLOATS_PER_DATASET 10
+#define DATA_ARRAY_SIZE FLOATS_PER_DATASET * VALUES_PER_DATASET * 4
 
-byte blue_led_state = HIGH;
-float gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z;
-String dataString = "";
-float data[DATASET_SIZE*6];
 
 // These UUIDs have been randomly generated. - they must match between the Central and Peripheral devices
 // Any changes you make here must be suitably made in the Python program as well
-
 BLEService nanoService("fc0a2500-af4b-4c14-b795-a49e9f7e6b84"); // BLE Service
-BLECharacteristic accelStringCharacteristic("fc0a2501-af4b-4c14-b795-a49e9f7e6b84", BLEWriteWithoutResponse | BLENotify, data, sizeof(data));
+BLECharacteristic dataCharacteristic("fc0a2501-af4b-4c14-b795-a49e9f7e6b84", BLEWriteWithoutResponse | BLENotify, DATA_ARRAY_SIZE, true);
 
+
+byte blue_led_state = HIGH;
+float gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z;
+int data_index = 0;
+float data[FLOATS_PER_DATASET * VALUES_PER_DATASET];
 
 
 void setup() {
@@ -54,13 +55,13 @@ void setup() {
     BLE.setAdvertisedService(nanoService);
 
     // add the characteristic to the service
-    nanoService.addCharacteristic(accelStringCharacteristic);
+    nanoService.addCharacteristic(dataCharacteristic);
 
     // add service
     BLE.addService(nanoService);
 
     // set the initial value for the characeristic:
-    accelStringCharacteristic.writeValue("");
+    dataCharacteristic.writeValue(data, DATA_ARRAY_SIZE);
 
     // start advertising
     BLE.advertise();
@@ -98,22 +99,29 @@ void loop() {
         
         // while the client is still connected:
         while (central.connected()) {
-            dataString = "";
-            for (int i = 0; i<DATASET_SIZE; i++) {
+            data_index = 0;
+            for (int i = 0; i<FLOATS_PER_DATASET; i++) {
+              if (!IMU.accelerationAvailable() || !IMU.gyroscopeAvailable()){
+                i = i - 1;
+                continue;
+              }
+              
               IMU.readGyroscope(gyro_x, gyro_y, gyro_z);
               IMU.readAcceleration(accel_x, accel_y, accel_z);
   
-              // Build our data string. ";" delemit the datasets
-              dataString += String(gyro_x, FLOAT_PRECISION) + ";";
-              dataString += String(gyro_y, FLOAT_PRECISION) + ";";
-              dataString += String(gyro_z, FLOAT_PRECISION) + ";";
-  
-              dataString += String(accel_x, FLOAT_PRECISION) + ";";
-              dataString += String(accel_y, FLOAT_PRECISION) + ";";
-              dataString += String(accel_z, FLOAT_PRECISION) + ";";
+              // Build our data
+              data[data_index] = gyro_x;
+              data[data_index + 1] = gyro_y;
+              data[data_index + 2] = gyro_z;
+
+              data[data_index + 3] = accel_x;
+              data[data_index + 4] = accel_y;
+              data[data_index + 5] = accel_z;
+
+              data_index = data_index + 6;
             }
             
-            accelStringCharacteristic.writeValue(dataString);
+            dataCharacteristic.writeValue(data, DATA_ARRAY_SIZE);
 
             digitalWrite(BLUE_PIN, blue_led_state);
 
