@@ -82,13 +82,28 @@ class Nano33BLE(object):
 class Plotter(object):
     def __init__(self, dq: mp.Queue):
         self.data_queue = dq
+
+        self.figure = None
+        self.axes = None
         self.animation = None
 
-        # Plot init
-        self.figure, self.axes = plt.subplots(2)
+        self.accel_plots = None
+        self.gyro_plots = None
 
-        self.accel_plots = self.axes[0, 0]
-        self.gyro_plots = self.axes[0, 1]
+        self.accel_x_plot = None
+        self.accel_y_plot = None
+        self.accel_z_plot = None
+
+        self.gyro_x_plot = None
+        self.gyro_y_plot = None
+        self.gyro_z_plot = None
+
+    def init_plots(self):
+        self.figure, self.axes = plt.subplots(2, figsize=(15, 10))
+        self.figure.tight_layout()
+
+        self.accel_plots = self.axes[0]
+        self.gyro_plots = self.axes[1]
 
         self.accel_plots.set_title("Accelerations")
         self.accel_plots.set_xlabel("Timestamp [s]")
@@ -102,15 +117,15 @@ class Plotter(object):
         self.gyro_plots.set_xlim(0, NUMBER_OF_DATA_POINTS)
         self.gyro_plots.set_ylim(-100, 100)
 
-        plt.legend()
+        self.accel_x_plot, = self.accel_plots.plot([1, 2, 3], [1, 2, 3], label="Accel X")
+        self.accel_y_plot, = self.accel_plots.plot([1, 2, 3], [2, 3, 4], label="Accel Y")
+        self.accel_z_plot, = self.accel_plots.plot([1, 2, 3], [3, 4, 5], label="Accel Z")
 
-        self.accel_x_plot = self.accel_plots.plot([], [], label="Accel X")
-        self.accel_y_plot = self.accel_plots.plot([], [], label="Accel Y")
-        self.accel_z_plot = self.accel_plots.plot([], [], label="Accel Z")
+        self.gyro_x_plot, = self.gyro_plots.plot([1, 2, 3], [1, 2, 3], label="Gyro X")
+        self.gyro_y_plot, = self.gyro_plots.plot([1, 2, 3], [2, 3, 4], label="Gyro Y")
+        self.gyro_z_plot, = self.gyro_plots.plot([1, 2, 3], [3, 4, 5], label="Gyro Z")
 
-        self.gyro_x_plot = self.gyro_plots.plot([], [], label="Gyro X")
-        self.gyro_y_plot = self.gyro_plots.plot([], [], label="Gyro Y")
-        self.gyro_z_plot = self.gyro_plots.plot([], [], label="Gyro Z")
+        self.figure.legend()
 
     def animate(self, frame: int):
         accel_x_y = self.accel_x_plot.get_ydata()
@@ -127,7 +142,7 @@ class Plotter(object):
 
         while True:
             try:
-                new_data.append(plot_queue.get(False))
+                new_data.append(self.data_queue.get(False))
 
             except Empty:
                 break
@@ -156,8 +171,8 @@ class Plotter(object):
         return self.accel_x_plot, self.accel_y_plot, self.accel_z_plot, self.gyro_x_plot, self.gyro_y_plot, self.gyro_z_plot
 
     def plot(self):
+        self.init_plots()
         self.animation = FuncAnimation(self.figure, self.animate, blit=True, interval=PLOT_UPDATE_INTERVAL)
-
         plt.show()
 
 
