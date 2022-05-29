@@ -8,13 +8,17 @@ from queue import Empty
 import numpy as np
 from collections import deque
 from typing import Deque
+from datetime import datetime
+import math
 
 BLE_DATA_UUID = 'fc0a2501-af4b-4c14-b795-a49e9f7e6b84'
 
 MAXIMUM_RUNTIME = 600  # in s
 PLOT_UPDATE_INTERVAL = 100  # in ms
-NUMBER_OF_DATA_POINTS = 5000
 PLOT_MARGIN = 10  # in %
+S_BETWEEN_DATAPOINTS = 1/119.6  # We aquire data with ~119hz
+TIME_PLOTTED = 60  # in seconds
+NUMBER_OF_DATA_POINTS = int(math.floor(TIME_PLOTTED / S_BETWEEN_DATAPOINTS))
 
 
 class DataPoint(object):
@@ -36,6 +40,7 @@ class Nano33BLE(object):
         self.serial_queue: mp.Queue = serial_q
 
         self.current_datapoint = 0  # Temporary until we get timestamp
+        self.datetime_started = datetime.utcnow()
 
     def callback_data(self, _, data):
         floats = deque()
@@ -44,7 +49,7 @@ class Nano33BLE(object):
             del data[0:4]
 
         for i in range(0, len(floats), 6):
-            dp = DataPoint(self.current_datapoint,  # Placeholder. we want to add the actual timestamp in seconds here, but it is not yet sent by the arduino
+            dp = DataPoint(self.current_datapoint * S_BETWEEN_DATAPOINTS,
                            floats[i + 0],
                            floats[i + 1],
                            floats[i + 2],
@@ -70,9 +75,14 @@ class Nano33BLE(object):
                     async with BleakClient(d.address) as client:
                         print(f'Connected to {d.address}')
 
+                        self.datetime_started = datetime.utcnow()
+
                         await client.start_notify(BLE_DATA_UUID, self.callback_data)
 
                         await asyncio.sleep(MAXIMUM_RUNTIME)
+
+                        seconds = (datetime.utcnow() - self.datetime_started).total_seconds()
+                        print(f"Acquired {self.current_datapoint} datapoints in {seconds}s for a average frequency of {self.current_datapoint / seconds}Hz")
 
                         await client.stop_notify(BLE_DATA_UUID)
 
