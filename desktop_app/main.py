@@ -14,6 +14,7 @@ BLE_DATA_UUID = 'fc0a2501-af4b-4c14-b795-a49e9f7e6b84'
 MAXIMUM_RUNTIME = 600  # in s
 PLOT_UPDATE_INTERVAL = 100  # in ms
 NUMBER_OF_DATA_POINTS = 5000
+PLOT_MARGIN = 10  # in %
 
 
 class DataPoint(object):
@@ -117,13 +118,13 @@ class Plotter(object):
         self.gyro_plots.set_xlim(0, NUMBER_OF_DATA_POINTS)
         self.gyro_plots.set_ylim(-100, 100)
 
-        self.accel_x_plot, = self.accel_plots.plot([1, 2, 3], [1, 2, 3], label="Accel X")
-        self.accel_y_plot, = self.accel_plots.plot([1, 2, 3], [2, 3, 4], label="Accel Y")
-        self.accel_z_plot, = self.accel_plots.plot([1, 2, 3], [3, 4, 5], label="Accel Z")
+        self.accel_x_plot, = self.accel_plots.plot([], [], label="Accel X")
+        self.accel_y_plot, = self.accel_plots.plot([], [], label="Accel Y")
+        self.accel_z_plot, = self.accel_plots.plot([], [], label="Accel Z")
 
-        self.gyro_x_plot, = self.gyro_plots.plot([1, 2, 3], [1, 2, 3], label="Gyro X")
-        self.gyro_y_plot, = self.gyro_plots.plot([1, 2, 3], [2, 3, 4], label="Gyro Y")
-        self.gyro_z_plot, = self.gyro_plots.plot([1, 2, 3], [3, 4, 5], label="Gyro Z")
+        self.gyro_x_plot, = self.gyro_plots.plot([], [], label="Gyro X")
+        self.gyro_y_plot, = self.gyro_plots.plot([], [], label="Gyro Y")
+        self.gyro_z_plot, = self.gyro_plots.plot([], [], label="Gyro Z")
 
         self.figure.legend()
 
@@ -147,18 +148,66 @@ class Plotter(object):
             except Empty:
                 break
 
+        if len(new_data) == 0:
+            return self.accel_x_plot, self.accel_y_plot, self.accel_z_plot, self.gyro_x_plot, self.gyro_y_plot, self.gyro_z_plot
+
+        new_x_data = deque()
+
+        new_accel_x_data = deque()
+        new_accel_y_data = deque()
+        new_accel_z_data = deque()
+
+        new_gyro_x_data = deque()
+        new_gyro_y_data = deque()
+        new_gyro_z_data = deque()
+
         for dp in new_data:
             dp: DataPoint
 
-            x = np.append(x, dp.timestamp)
+            new_x_data.append(dp.timestamp)
 
-            accel_x_y = np.append(accel_x_y, dp.accel_x)[-NUMBER_OF_DATA_POINTS:]
-            accel_y_y = np.append(accel_y_y, dp.accel_y)[-NUMBER_OF_DATA_POINTS:]
-            accel_z_y = np.append(accel_z_y, dp.accel_z)[-NUMBER_OF_DATA_POINTS:]
+            new_accel_x_data.append(dp.accel_x)
+            new_accel_y_data.append(dp.accel_y)
+            new_accel_z_data.append(dp.accel_z)
 
-            gyro_x_y = np.append(gyro_x_y, dp.gyro_x)[-NUMBER_OF_DATA_POINTS:]
-            gyro_y_y = np.append(gyro_y_y, dp.gyro_y)[-NUMBER_OF_DATA_POINTS:]
-            gyro_z_y = np.append(gyro_z_y, dp.gyro_z)[-NUMBER_OF_DATA_POINTS:]
+            new_gyro_x_data.append(dp.gyro_x)
+            new_gyro_y_data.append(dp.gyro_y)
+            new_gyro_z_data.append(dp.gyro_z)
+
+        x = np.append(x, new_x_data)[-NUMBER_OF_DATA_POINTS:]
+
+        accel_x_y = np.append(accel_x_y, new_accel_x_data)[-NUMBER_OF_DATA_POINTS:]
+        accel_y_y = np.append(accel_y_y, new_accel_y_data)[-NUMBER_OF_DATA_POINTS:]
+        accel_z_y = np.append(accel_z_y, new_accel_z_data)[-NUMBER_OF_DATA_POINTS:]
+
+        gyro_x_y = np.append(gyro_x_y, new_gyro_x_data)[-NUMBER_OF_DATA_POINTS:]
+        gyro_y_y = np.append(gyro_y_y, new_gyro_y_data)[-NUMBER_OF_DATA_POINTS:]
+        gyro_z_y = np.append(gyro_z_y, new_gyro_z_data)[-NUMBER_OF_DATA_POINTS:]
+
+        min_x = min(x, default=0)
+        max_x = max(x, default=10)
+
+        min_accel_y = min(accel_x_y + accel_y_y + accel_z_y)
+        max_accel_y = max(accel_x_y + accel_y_y + accel_z_y)
+
+        accel_delta = max((max_accel_y - min_accel_y) * (PLOT_MARGIN / 100), 0.5)
+
+        min_accel_y -= accel_delta
+        max_accel_y += accel_delta
+
+        min_gyro_y = min(gyro_x_y + gyro_y_y + gyro_z_y)
+        max_gyro_y = max(gyro_x_y + gyro_y_y + gyro_z_y)
+
+        gyro_delta = max((max_gyro_y - min_gyro_y) * (PLOT_MARGIN / 100), 10)
+
+        min_gyro_y -= gyro_delta
+        max_gyro_y += gyro_delta
+
+        self.accel_plots.set_xlim(min_x, max_x)
+        self.accel_plots.set_ylim(min_accel_y, max_accel_y)
+
+        self.gyro_plots.set_xlim(min_x, max_x)
+        self.gyro_plots.set_ylim(min_gyro_y, max_gyro_y)
 
         self.accel_x_plot.set_data(x, accel_x_y)
         self.accel_y_plot.set_data(x, accel_y_y)
@@ -172,7 +221,7 @@ class Plotter(object):
 
     def plot(self):
         self.init_plots()
-        self.animation = FuncAnimation(self.figure, self.animate, blit=True, interval=PLOT_UPDATE_INTERVAL)
+        self.animation = FuncAnimation(self.figure, self.animate, blit=False, interval=PLOT_UPDATE_INTERVAL)
         plt.show()
 
 
