@@ -10,15 +10,19 @@ from collections import deque
 from typing import Deque
 from datetime import datetime
 import math
+import mplcyberpunk  # noqa: we use these cyberpunk theme below, import is required
 
 BLE_DATA_UUID = 'fc0a2501-af4b-4c14-b795-a49e9f7e6b84'
 
 MAXIMUM_RUNTIME = 600  # in s
 PLOT_UPDATE_INTERVAL = 100  # in ms
 PLOT_MARGIN = 10  # in %
-S_BETWEEN_DATAPOINTS = 1/119.6  # We aquire data with ~119hz
-TIME_PLOTTED = 60  # in seconds
+S_BETWEEN_DATAPOINTS = 1 / 119.6  # We acquire data with ~119hz
+TIME_PLOTTED = 10  # in seconds
 NUMBER_OF_DATA_POINTS = int(math.floor(TIME_PLOTTED / S_BETWEEN_DATAPOINTS))
+
+SAVE_ANIMATION = False
+PATH_TO_ANIMATION_FILE = "animation.mp4"
 
 
 class DataPoint(object):
@@ -98,9 +102,6 @@ class Plotter(object):
         self.axes = None
         self.animation = None
 
-        self.accel_plots = None
-        self.gyro_plots = None
-
         self.accel_x_plot = None
         self.accel_y_plot = None
         self.accel_z_plot = None
@@ -109,45 +110,81 @@ class Plotter(object):
         self.gyro_y_plot = None
         self.gyro_z_plot = None
 
+        self.accel_x_line = None
+        self.accel_y_line = None
+        self.accel_z_line = None
+
+        self.gyro_x_line = None
+        self.gyro_y_line = None
+        self.gyro_z_line = None
+
     def init_plots(self):
-        self.figure, self.axes = plt.subplots(2, figsize=(15, 10))
-        self.figure.tight_layout()
+        self.figure, self.axes = plt.subplots(nrows=2, ncols=3, figsize=(15, 10))
+        self.figure.tight_layout(pad=3)
 
-        self.accel_plots = self.axes[0]
-        self.gyro_plots = self.axes[1]
+        self.accel_x_plot = self.axes[0, 0]
+        self.accel_y_plot = self.axes[0, 1]
+        self.accel_z_plot = self.axes[0, 2]
+        self.gyro_x_plot = self.axes[1, 0]
+        self.gyro_y_plot = self.axes[1, 1]
+        self.gyro_z_plot = self.axes[1, 2]
 
-        self.accel_plots.set_title("Accelerations")
-        self.accel_plots.set_xlabel("Timestamp [s]")
-        self.accel_plots.set_ylabel("Acceleration [G]")
-        self.accel_plots.set_xlim(0, NUMBER_OF_DATA_POINTS)
-        self.accel_plots.set_ylim(-2, 2)
+        self.accel_x_plot.set_title("X")
+        self.accel_x_plot.set_xlabel("Time [s]")
+        self.accel_x_plot.set_ylabel("Acceleration [G]")
+        self.accel_x_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.accel_x_plot.set_ylim(-2, 2)
 
-        self.gyro_plots.set_title("Gyro")
-        self.gyro_plots.set_xlabel("Timestamp [s]")
-        self.gyro_plots.set_ylabel("Position")
-        self.gyro_plots.set_xlim(0, NUMBER_OF_DATA_POINTS)
-        self.gyro_plots.set_ylim(-100, 100)
+        self.accel_y_plot.set_title("Y")
+        self.accel_y_plot.set_xlabel("Time [s]")
+        self.accel_y_plot.set_ylabel("Acceleration [G]")
+        self.accel_y_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.accel_y_plot.set_ylim(-2, 2)
 
-        self.accel_x_plot, = self.accel_plots.plot([], [], label="Accel X")
-        self.accel_y_plot, = self.accel_plots.plot([], [], label="Accel Y")
-        self.accel_z_plot, = self.accel_plots.plot([], [], label="Accel Z")
+        self.accel_z_plot.set_title("Z")
+        self.accel_z_plot.set_xlabel("Time [s]")
+        self.accel_z_plot.set_ylabel("Acceleration [G]")
+        self.accel_z_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.accel_z_plot.set_ylim(-2, 2)
 
-        self.gyro_x_plot, = self.gyro_plots.plot([], [], label="Gyro X")
-        self.gyro_y_plot, = self.gyro_plots.plot([], [], label="Gyro Y")
-        self.gyro_z_plot, = self.gyro_plots.plot([], [], label="Gyro Z")
+        # self.gyro_plots_x.set_title("Gyro X")
+        self.gyro_x_plot.set_xlabel("Time [s]")
+        self.gyro_x_plot.set_ylabel("Position")
+        self.gyro_x_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.gyro_x_plot.set_ylim(-100, 100)
 
-        self.figure.legend()
+        # self.gyro_plots_y.set_title("Gyro Y")
+        self.gyro_y_plot.set_xlabel("Time [s]")
+        self.gyro_y_plot.set_ylabel("Position")
+        self.gyro_y_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.gyro_y_plot.set_ylim(-100, 100)
 
-    def animate(self, frame: int):
-        accel_x_y = self.accel_x_plot.get_ydata()
-        accel_y_y = self.accel_y_plot.get_ydata()
-        accel_z_y = self.accel_z_plot.get_ydata()
+        # self.gyro_plots_z.set_title("Gyro Z")
+        self.gyro_z_plot.set_xlabel("Time [s]")
+        self.gyro_z_plot.set_ylabel("Position")
+        self.gyro_z_plot.set_xlim(0, NUMBER_OF_DATA_POINTS)
+        self.gyro_z_plot.set_ylim(-100, 100)
 
-        gyro_x_y = self.gyro_x_plot.get_ydata()
-        gyro_y_y = self.gyro_y_plot.get_ydata()
-        gyro_z_y = self.gyro_z_plot.get_ydata()
+        self.accel_x_line, = self.accel_x_plot.plot([], [], label="Accel X", color='cyan')
+        self.accel_y_line, = self.accel_y_plot.plot([], [], label="Accel Y", color='magenta')
+        self.accel_z_line, = self.accel_z_plot.plot([], [], label="Accel Z", color='yellow')
 
-        x = self.accel_x_plot.get_xdata()
+        self.gyro_x_line, = self.gyro_x_plot.plot([], [], label="Gyro X", color='cyan')
+        self.gyro_y_line, = self.gyro_y_plot.plot([], [], label="Gyro Y", color='magenta')
+        self.gyro_z_line, = self.gyro_z_plot.plot([], [], label="Gyro Z", color='yellow')
+
+        # self.figure.legend()
+
+    def animate(self, frame: int):  # noqa: frame is never used but required for the animation function
+        accel_x_y = self.accel_x_line.get_ydata()
+        accel_y_y = self.accel_y_line.get_ydata()
+        accel_z_y = self.accel_z_line.get_ydata()
+
+        gyro_x_y = self.gyro_x_line.get_ydata()
+        gyro_y_y = self.gyro_y_line.get_ydata()
+        gyro_z_y = self.gyro_z_line.get_ydata()
+
+        x = self.accel_x_line.get_xdata()
 
         new_data: Deque[DataPoint] = deque()
 
@@ -159,7 +196,7 @@ class Plotter(object):
                 break
 
         if len(new_data) == 0:
-            return self.accel_x_plot, self.accel_y_plot, self.accel_z_plot, self.gyro_x_plot, self.gyro_y_plot, self.gyro_z_plot
+            return self.accel_x_line, self.accel_y_line, self.accel_z_line, self.gyro_x_line, self.gyro_y_line, self.gyro_z_line
 
         new_x_data = deque()
 
@@ -213,25 +250,36 @@ class Plotter(object):
         min_gyro_y -= gyro_delta
         max_gyro_y += gyro_delta
 
-        self.accel_plots.set_xlim(min_x, max_x)
-        self.accel_plots.set_ylim(min_accel_y, max_accel_y)
+        # Set Plot limits. This "zooms" the plot correctly
+        self.accel_x_plot.set_xlim(min_x, max_x)  # noqa: We are aware this looks duplicate but its easy this way
+        self.accel_y_plot.set_xlim(min_x, max_x)
+        self.accel_z_plot.set_xlim(min_x, max_x)
+        self.accel_x_plot.set_ylim(min_accel_y, max_accel_y)
+        self.accel_y_plot.set_ylim(min_accel_y, max_accel_y)
+        self.accel_z_plot.set_ylim(min_accel_y, max_accel_y)
 
-        self.gyro_plots.set_xlim(min_x, max_x)
-        self.gyro_plots.set_ylim(min_gyro_y, max_gyro_y)
+        self.gyro_x_plot.set_xlim(min_x, max_x)  # noqa: We are aware this looks duplicate but its easy this way
+        self.gyro_y_plot.set_xlim(min_x, max_x)
+        self.gyro_z_plot.set_xlim(min_x, max_x)
+        self.gyro_x_plot.set_ylim(min_gyro_y, max_gyro_y)
+        self.gyro_y_plot.set_ylim(min_gyro_y, max_gyro_y)
+        self.gyro_z_plot.set_ylim(min_gyro_y, max_gyro_y)
 
-        self.accel_x_plot.set_data(x, accel_x_y)
-        self.accel_y_plot.set_data(x, accel_y_y)
-        self.accel_z_plot.set_data(x, accel_z_y)
+        # Set line data. This updates the actual plot lines
+        self.accel_x_line.set_data(x, accel_x_y)
+        self.accel_y_line.set_data(x, accel_y_y)
+        self.accel_z_line.set_data(x, accel_z_y)
 
-        self.gyro_x_plot.set_data(x, gyro_x_y)
-        self.gyro_y_plot.set_data(x, gyro_y_y)
-        self.gyro_z_plot.set_data(x, gyro_z_y)
+        self.gyro_x_line.set_data(x, gyro_x_y)
+        self.gyro_y_line.set_data(x, gyro_y_y)
+        self.gyro_z_line.set_data(x, gyro_z_y)
 
-        return self.accel_x_plot, self.accel_y_plot, self.accel_z_plot, self.gyro_x_plot, self.gyro_y_plot, self.gyro_z_plot
+        return self.accel_x_line, self.accel_y_line, self.accel_z_line, self.gyro_x_line, self.gyro_y_line, self.gyro_z_line
 
     def plot(self):
+        plt.style.use('cyberpunk')
         self.init_plots()
-        self.animation = FuncAnimation(self.figure, self.animate, blit=False, interval=PLOT_UPDATE_INTERVAL)
+        self.animation = FuncAnimation(self.figure, self.animate, blit=True, interval=PLOT_UPDATE_INTERVAL)
         plt.show()
 
 
@@ -261,9 +309,9 @@ if __name__ == '__main__':
         serial_p.start()
 
         data_p.join()
-        plot_p.join()
-        serial_p.join()
     except KeyboardInterrupt:
         print('\nReceived Keyboard Interrupt')
     finally:
+        if SAVE_ANIMATION:
+            plotter.animation.save(PATH_TO_ANIMATION_FILE)  # noqa: Plotter is never undefined or we dont get here anways
         print('Program finished')
