@@ -11,6 +11,10 @@ from typing import Deque
 from datetime import datetime
 import math
 import mplcyberpunk  # noqa: we use these cyberpunk theme below, import is required
+import websockets
+from websockets import WebSocketServerProtocol
+from websockets.exceptions import ConnectionClosed
+
 
 BLE_DATA_UUID = 'fc0a2501-af4b-4c14-b795-a49e9f7e6b84'
 
@@ -283,12 +287,38 @@ class Plotter(object):
         plt.show()
 
 
-class SerialSender(object):
+class WebsocketServer(object):
     def __init__(self, serial_q: mp.Queue):
         self.data_queue = serial_q
 
+    async def ws_handler(self, ws: WebSocketServerProtocol, uri: str) -> None:
+        print(f"{datetime.utcnow()}: {ws.remote_address} connected and wants some data")
+
+        try:
+            async for message in ws:
+                print(f"Received Message: {message}")
+                new_data: Deque[DataPoint] = deque()
+
+                while True:
+                    try:
+                        new_data.append(self.data_queue.get(False))
+
+                    except Empty:
+                        break
+
+                try:
+                    data_to_send: DataPoint = new_data[-1]
+                    await ws.send(f"{data_to_send.gyro_x:.3f};{data_to_send.gyro_y:.3f};{data_to_send.gyro_z:.3f};{data_to_send.accel_x:.3f};{data_to_send.accel_y:.3f};{data_to_send.accel_z:.3f}")
+                except:
+                    await ws.send(f"0.000;0.000;0.000;0.000;0.000;0.000")
+        except ConnectionClosed:
+            print("Connection was closed violently, but we survived!")
+
     def process(self):
-        pass
+        start_server = websockets.serve(self.ws_handler, "localhost", 4000)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(start_server)
+        loop.run_forever()
 
 
 if __name__ == '__main__':
@@ -298,17 +328,18 @@ if __name__ == '__main__':
 
         ard = Nano33BLE(plot_queue, serial_queue)
         plotter = Plotter(plot_queue)
-        serial = SerialSender(serial_queue)
+        websocket_server = WebsocketServer(serial_queue)
 
         data_p = mp.Process(target=ard.process)
         plot_p = mp.Process(target=plotter.plot)
-        serial_p = mp.Process(target=serial.process)
+        websocket_p = mp.Process(target=websocket_server.process)
 
         data_p.start()
         plot_p.start()
-        serial_p.start()
+        websocket_p.start()
 
         data_p.join()
+        websocket_p.join()
     except KeyboardInterrupt:
         print('\nReceived Keyboard Interrupt')
     finally:
